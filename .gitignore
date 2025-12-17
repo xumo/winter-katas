@@ -1,3 +1,15 @@
+# build directories
+build*
+cmake-build*
+xcode-build*
+
+# ide directories
+.idea
+.cache
+
+# mac directory file
+*.DS_Store
+
 # Prerequisites
 *.d
 
