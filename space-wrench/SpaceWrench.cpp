@@ -1,5 +1,6 @@
 #include "Resources.hpp"
 
+
 #include <format>
 #include <iostream>
 #include <set>
@@ -20,7 +21,9 @@
 
 /*
 *
-https://www.monolithsoft.co.jp/techblog/articles/000629.html
+ https://www.monolithsoft.co.jp/techblog/articles/000629.html
+ translated:
+ https://www-monolithsoft-co-jp.translate.goog/techblog/articles/000629.html?_x_tr_sl=ja&_x_tr_tl=en&_x_tr_hl=pt-PT&_x_tr_pto=wapp
 1 Give the initial torque ( N ).
 2 Angular acceleration is calculated by solving Euler's equation of rotational motion in the rigid body's local coordinate system.
 
@@ -70,14 +73,15 @@ class BoltPlaygroundApp : public App {
 	void	draw() override;
 
 
-	void	loadObj( const DataSourceRef &dataSource );
-	void	setupSphere();
-	void	createGrid();
-
-	glm::mat3x3    getTriangleInerciaTensor(const Triangle& triangle, const vec3 &centerMass);
-
+	
   private:
 
+    TriMeshRef    loadObj( const DataSourceRef &dataSource );
+    std::vector<Triangle> triangulate(const TriMeshRef &mesh);
+    void    setupSphere();
+    void    createGrid();
+    void    calculateBodyInertia();
+    glm::mat3x3    getTriangleInerciaTensor(const Triangle& triangle, const vec3 &centerMass);
 
 	CameraUi		mCamUi;
 	CameraPersp		mCam;
@@ -96,6 +100,7 @@ class BoltPlaygroundApp : public App {
 	double			mLastTime;
 	float			mVolume = 0.0f;
 	float			mMass = 0.0f;
+    
 	vec3			mTorque = vec3(0.0f, M_2_PI + mMass * 50.0f , 100.0f);
 	vec3			mW = vec3(0.0f, 0.0f, 0.0f);
 	vec4			mOrient = vec4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -109,18 +114,21 @@ void BoltPlaygroundApp::setup()
 	auto fragShader = loadResource( RES_SHADER_FRAG );
 	mGlsl = gl::GlslProg::create( vertShader, fragShader );
 	mRedGlsl = gl::getStockShader(gl::ShaderDef().lambert());
-
 	mGlsl->uniform( "uTex0", 0 );
-
-	mCam.setPerspective( 60.0f, getWindowAspectRatio(), 0.1, 10000 );
-
+	
+    mCam.setPerspective( 60.0f, getWindowAspectRatio(), 0.1, 10000 );
 	mCamUi = CameraUi( &mCam );
 
 	mCheckerTexture = gl::Texture::create( ip::checkerboard( 512, 512, 32 ) );
 	mCheckerTexture->bind( 0 );
 
 
-	loadObj( loadResource( RES_8LBS_OBJ ) );
+	mMesh = loadObj( loadResource( RES_8LBS_OBJ ) );
+    mBatch = gl::Batch::create( *mMesh, mGlsl );
+    //assert(mMesh);
+    mTriangles =  triangulate(mMesh);
+    
+    
 	setupSphere();
 	createGrid();
 
@@ -129,13 +137,9 @@ void BoltPlaygroundApp::setup()
 }
 
 void BoltPlaygroundApp::setupSphere() {
-
-	//loadGeomSource( geom::Sphere().subdivisions( 60 ), geom::WireSphere() );
 	TriMesh::Format fmt = TriMesh::Format().positions().normals().texCoords().tangents();
 	TriMesh mesh( geom::Sphere().subdivisions( 60 ).radius(7.5), fmt );
-
-	mSphereBatch = gl::Batch::create( mesh, mRedGlsl );
-
+    mSphereBatch = gl::Batch::create( mesh, mRedGlsl );
 }
 
 glm::mat3x3    BoltPlaygroundApp::getTriangleInerciaTensor(const Triangle& triangle, const vec3 &centerMass) {
@@ -166,52 +170,59 @@ glm::mat3x3    BoltPlaygroundApp::getTriangleInerciaTensor(const Triangle& trian
 					{-bp, -ap, c} };
 }
 
-void BoltPlaygroundApp::loadObj( const DataSourceRef &dataSource )
+TriMeshRef BoltPlaygroundApp::loadObj( const DataSourceRef &dataSource )
 {
 	ObjLoader loader( dataSource );
-	mMesh = TriMesh::create( loader );
-	auto normals = mMesh->getNormals();
+	auto mesh  = TriMesh::create( loader );
+	auto normals = mesh->getNormals();
 
-	cout << "Loaded mesh with " << mMesh->getNumVertices() << " vertices, " << mMesh->getNumIndices() / 3 << " triangles, "
-		<< ( normals.empty() ? 'no' : normals.size()  ) << " normals." << std::endl;
+	cout << "Loaded mesh with " << mesh->getNumVertices() << " vertices, " << mesh->getNumIndices() / 3 << " triangles, "
+		<< ( normals.empty() ? 0 : normals.size()  ) << " normals." << std::endl;
 
 	if( ! loader.getAvailableAttribs().count( geom::NORMAL ) )
-		mMesh->recalculateNormals();
+		mesh->recalculateNormals();
+    return mesh;
+}
 
-	if (mMesh->getNumIndices() > 0 && mMesh->getNumIndices() % 3 == 0) {
-		for (int i = 0; i <  mMesh->getIndices().size(); i+=3){
-			uint32_t idx1 = mMesh->getIndices()[i];
-			uint32_t idx2 = mMesh->getIndices()[i+1];
-			uint32_t idx3 = mMesh->getIndices()[i+2];
-			vec3 v1 = mMesh->getPositions<3>()[idx1];
-			vec3 v2 = mMesh->getPositions<3>()[idx2];
-			vec3 v3 = mMesh->getPositions<3>()[idx3];
-			mTriangles.emplace_back(v1, v2, v3 );
-		}
-	}
-	mVolume= 0.0f;
-	mCenterMass= vec3(0.0f);
-	glm::mat3x3 inertiaTensor(0.0f);
-	for (const auto &t : mTriangles) {
-		auto vol = t.Determinant() /6.0f;
-		mVolume += vol;
-		mCenterMass += vol * ( (t.R1() + t.R2() + t.R3()) / 4.0f );
+vector<Triangle> BoltPlaygroundApp::triangulate(const TriMeshRef& mesh)
+{
+    vector<Triangle> triangles = {};
+    if (mesh->getNumIndices() > 0 && mesh->getNumIndices() % 3 == 0) {
+        for (int i = 0; i <  mesh->getIndices().size(); i+=3){
+            uint32_t idx1 = mesh->getIndices()[i];
+            uint32_t idx2 = mesh->getIndices()[i+1];
+            uint32_t idx3 = mesh->getIndices()[i+2];
+            vec3 v1 = mesh->getPositions<3>()[idx1];
+            vec3 v2 = mesh->getPositions<3>()[idx2];
+            vec3 v3 = mesh->getPositions<3>()[idx3];
+            triangles.emplace_back(v1, v2, v3 );
+        }
+    }
+    return triangles;
+}
 
-	}
+void BoltPlaygroundApp::calculateBodyInertia()
+{
+    mVolume= 0.0f;
+    mCenterMass= vec3(0.0f);
+    glm::mat3x3 inertiaTensor(0.0f);
+    for (const auto &t : mTriangles) {
+        auto vol = t.Determinant() /6.0f;
+        mVolume += vol;
+        mCenterMass += vol * ( (t.R1() + t.R2() + t.R3()) / 4.0f );
 
-	mCenterMass /= mVolume > 0 ?  mVolume : 1.0f;
-	mInertiaTensor = glm::mat3x3(0.0f);
-	for (const auto &t : mTriangles) {
-		auto tensor = getTriangleInerciaTensor(t, mCenterMass);
-		mInertiaTensor += tensor;
-	}
-	mMass = mVolume * 1000.0f; // density 1000 kg/m^3
+    }
 
-	mBatch = gl::Batch::create( *mMesh, mGlsl );
-
-	mBoundingSphere = Sphere::calculateBoundingSphere( mMesh->getPositions<3>(), mMesh->getNumVertices() );
-	mBoundingSphere.setRadius(2 * mBoundingSphere.getRadius());
-	mQuat = quat();
+    mCenterMass /= mVolume > 0 ?  mVolume : 1.0f;
+    mInertiaTensor = glm::mat3x3(0.0f);
+    for (const auto &t : mTriangles) {
+        auto tensor = getTriangleInerciaTensor(t, mCenterMass);
+        mInertiaTensor += tensor;
+    }
+    mMass = mVolume * 1000.0f; // density 1000 kg/m^3
+    mBoundingSphere = Sphere::calculateBoundingSphere( mMesh->getPositions<3>(), mMesh->getNumVertices() );
+    mBoundingSphere.setRadius(2 * mBoundingSphere.getRadius());
+    mQuat = quat();
 }
 
 void BoltPlaygroundApp::createGrid()
@@ -235,8 +246,6 @@ void BoltPlaygroundApp::createGrid()
 	}
 	mGrid->end();
 }
-
-
 
 /*
 
@@ -278,8 +287,9 @@ void BoltPlaygroundApp::update()
 	double elapsed = getElapsedSeconds() - mLastTime;
 	mLastTime = getElapsedSeconds();
 
-	//quat incQuat = angleAxis( 0.05f, vec3(0.0f, 1.0f, 0.0f) );
-	//mQuat = incQuat * mQuat;
+	quat incQuat = angleAxis( 0.05f, vec3(0.0f, 1.0f, 0.0f) );
+	mQuat = incQuat * mQuat;
+    
 	mW = eulerAngles(mQuat);
 	vec3 t = mTorque;;
 	vec3 w = mW;
@@ -334,43 +344,29 @@ void BoltPlaygroundApp::update()
 	// dw / dt = inv(I) * ( torque - cross( w, I * w ) )
 
 	mTorque = vec3(0.0f, 0.0f, 0.0f);
-	mQuat = mQuat *  kw;
-	//mW       = rotate(mQuat, w + kdw);
+	//mQuat = mQuat *  kw;
+	//mW    = rotate(mQuat, w + kdw);
 
 }
-
 
 void BoltPlaygroundApp::draw() {
 	gl::enableDepthWrite();
 	gl::enableDepthRead();
-
 	gl::clear(Color(0.4f, 0.6f, 0.9f));
-
 	gl::setMatrices( mCam );
-
 	gl::pushMatrices();
 		gl::rotate( mQuat );
-		mBatch->draw();
-
-		gl::translate( mCenterMass);
-		mSphereBatch->draw();
-	gl::popMatrices();
-
-	gl::disableDepthWrite();
-
-	// Draw the grid.
-	if( mGrid ) {
-		gl::ScopedGlslProg scopedGlslProg( gl::context()->getStockShader( gl::ShaderDef().color() ) );
-
-		mGrid->draw();
-
-		// draw the coordinate frame with length 2.
-		gl::drawCoordinateFrame( 2 );
-	}
-
-	// Disable the depth buffer.
-	gl::disableDepthRead();
-
+        mBatch->draw();
+        gl::translate( mCenterMass);
+        mSphereBatch->draw();
+    gl::popMatrices();
+    gl::disableDepthWrite();
+    if( mGrid ) {
+        gl::ScopedGlslProg scopedGlslProg( gl::context()->getStockShader( gl::ShaderDef().color() ) );
+        mGrid->draw();
+        gl::drawCoordinateFrame( 2 );
+    }
+    gl::disableDepthRead();
 }
 
 
