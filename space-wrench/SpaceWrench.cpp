@@ -14,6 +14,7 @@
 #include "cinder/Arcball.h"
 #include "cinder/CameraUi.h"
 #include "cinder/Sphere.h"
+#include "cinder/CinderImGui.h"
 
 
 #include "glm/glm.hpp"
@@ -74,6 +75,7 @@ class BoltPlaygroundApp : public App {
 
   private:
 
+    void                    reset();
     TriMeshRef              loadObj( const DataSourceRef &dataSource );
     std::vector<Triangle>   triangulate(const TriMeshRef &mesh);
     void                    createGrid();
@@ -97,13 +99,20 @@ class BoltPlaygroundApp : public App {
 	double			mVolume = 0.0;
 	double			mMass = 50.0f;
     
-	glm::vec<3, double>			mTorque = vec3(0.0);
-    glm::vec<3, double>			mW = vec3(0.0);
+	glm::vec<3, double>			mTorque =   glm::vec<3, double>(0.0);
+    glm::vec<3, double>			mW =   glm::vec<3, double>(0.0);
     glm::qua<double>            mQuat;
+    double          mYMult = 66000000;
+    double          mZMult = 3000000000000;
 };
 
 void BoltPlaygroundApp::setup()
 {
+    
+    ImGui::Initialize( ImGui::Options().window( getWindow() ).enableKeyboard( true ) );
+    ImGui::GetStyle().ScaleAllSizes( getWindowContentScale() ); // for Retina / hi-dpi
+    ImGui::GetStyle().FontScaleMain = getWindowContentScale();
+    
 	auto vertShader = loadResource( RES_SHADER_VERT );
 	auto fragShader = loadResource( RES_SHADER_FRAG );
 	mGlsl = gl::GlslProg::create( vertShader, fragShader );
@@ -124,6 +133,14 @@ void BoltPlaygroundApp::setup()
 	createGrid();
 
 	mLastTime = getElapsedSeconds();
+    //reset();
+}
+
+void BoltPlaygroundApp::reset()
+{
+    mQuat = glm::qua<double>();
+    mTorque = glm::vec<3, double>(0.0, M_2_PI + mMass * mYMult, mZMult );
+    mW =   glm::vec<3, double>(0.0);
 }
 
 
@@ -190,7 +207,6 @@ void BoltPlaygroundApp::calculateBodyInertia()
 {
     mVolume= 0.0f;
     mCenterMass= vec3(0.0f);
-    glm::mat<3,3,double> inertiaTensor(0.0f);
     for (const auto &t : mTriangles) {
         auto vol = t.Determinant() /6.0f;
         mVolume += vol;
@@ -205,9 +221,6 @@ void BoltPlaygroundApp::calculateBodyInertia()
         mInertiaTensor += tensor;
     }
     mMass = mVolume * 1000; // density 1000 kg/m^3
-   
-    mQuat = glm::qua<double>();
-    mTorque = glm::vec<3, double>(0.0, M_2_PI + mMass * 66000000, 3000000000000 );
 }
 
 void BoltPlaygroundApp::createGrid()
@@ -343,7 +356,23 @@ void BoltPlaygroundApp::draw() {
         gl::drawCoordinateFrame( 2 );
     }
     gl::disableDepthRead();
+    auto fpsString = std::format( "FPS: {}", getAverageFps());
+
+    ImGui::Begin("Space Wrench");
+    ImGui::Text("%s", fpsString.c_str());
+    double yMin = 1000.0;
+    double yMax = 1000000000.0;
+    double zMin = 100000000.0;
+    double zMax = 100000000000000.0;
+    ImGui::Text("Torque for Y, Z");
+    ImGui::SliderScalar("Y Multiplicator", ImGuiDataType_Double, &mYMult, &yMin, &yMax);
+    ImGui::SliderScalar("Z Multiplicator", ImGuiDataType_Double, &mZMult, &zMin, &zMax);
+    if (ImGui::Button("Reset")) {
+        reset();
+    }
+    ImGui::End();
 }
 
 
 CINDER_APP( BoltPlaygroundApp, RendererGl, [] ( App::Settings *settings ) {} )
+
