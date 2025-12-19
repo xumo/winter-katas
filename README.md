@@ -11,3 +11,10 @@ Experment to improve drawing lightning bolts for a previous installations. The o
 
 ## space-wrench
 A recreation of a physics simulation of a wrench in space done by Monolith Soft:  [Space Wrench](https://www.monolithsoft.co.jp/techblog/articles/000629.html) 
+
+So far only normal rotation and precession achieved:
+
+
+![Space Wrench Animation](./space-wrench/assets/space_wrench.gif)
+
+Varying initial torque parameters might render some interesting results.
