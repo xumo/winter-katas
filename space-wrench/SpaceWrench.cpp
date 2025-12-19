@@ -72,75 +72,60 @@ class BoltPlaygroundApp : public App {
 	void	update() override;
 	void	draw() override;
 
-
-	
   private:
 
-    TriMeshRef    loadObj( const DataSourceRef &dataSource );
-    std::vector<Triangle> triangulate(const TriMeshRef &mesh);
-    void    setupSphere();
-    void    createGrid();
-    void    calculateBodyInertia();
-    glm::mat3x3    getTriangleInerciaTensor(const Triangle& triangle, const vec3 &centerMass);
+    TriMeshRef              loadObj( const DataSourceRef &dataSource );
+    std::vector<Triangle>   triangulate(const TriMeshRef &mesh);
+    void                    createGrid();
+    void                    calculateBodyInertia();
+    glm::mat3x3             getTriangleInerciaTensor(const Triangle& triangle, const vec3 &centerMass);
 
 	CameraUi		mCamUi;
 	CameraPersp		mCam;
 	TriMeshRef		mMesh;
-	Sphere			mBoundingSphere;
 	gl::BatchRef	mBatch;
-	gl::BatchRef	mSphereBatch;
-	gl::GlslProgRef	mGlsl, mRedGlsl;
+	gl::GlslProgRef	mGlsl;
 	gl::VertBatchRef	mGrid;
 	gl::TextureRef	mCheckerTexture;
 	std::vector<Triangle> mTriangles = {};
 	vec3			mCenterMass = vec3(0.0f);
-	glm::mat3x3     mInertiaTensor = glm::mat3x3(0.0f);
-	quat			mQuat;
+	glm::mat<3,3,double>     mInertiaTensor = glm::mat<3,3,double> (0.0);
+	
+   
 	vec3			mLastPos;
 	double			mLastTime;
-	float			mVolume = 0.0f;
-	float			mMass = 0.0f;
+	double			mVolume = 0.0;
+	double			mMass = 50.0f;
     
-	vec3			mTorque = vec3(0.0f, M_2_PI + mMass * 50.0f , 100.0f);
-	vec3			mW = vec3(0.0f, 0.0f, 0.0f);
-	vec4			mOrient = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+	glm::vec<3, double>			mTorque = vec3(0.0);
+    glm::vec<3, double>			mW = vec3(0.0);
+    glm::qua<double>            mQuat;
 };
 
 void BoltPlaygroundApp::setup()
 {
-	auto assetPath = getAssetPath( "assets" );
-	cout << "Asset path: " << assetPath << std::endl;
 	auto vertShader = loadResource( RES_SHADER_VERT );
 	auto fragShader = loadResource( RES_SHADER_FRAG );
 	mGlsl = gl::GlslProg::create( vertShader, fragShader );
-	mRedGlsl = gl::getStockShader(gl::ShaderDef().lambert());
 	mGlsl->uniform( "uTex0", 0 );
 	
-    mCam.setPerspective( 60.0f, getWindowAspectRatio(), 0.1, 10000 );
+    mCam.setPerspective( 50.0f, getWindowAspectRatio(), 0.1, 1000 );
 	mCamUi = CameraUi( &mCam );
 
 	mCheckerTexture = gl::Texture::create( ip::checkerboard( 512, 512, 32 ) );
 	mCheckerTexture->bind( 0 );
 
-
 	mMesh = loadObj( loadResource( RES_8LBS_OBJ ) );
     mBatch = gl::Batch::create( *mMesh, mGlsl );
-    //assert(mMesh);
+    assert(mMesh);
     mTriangles =  triangulate(mMesh);
+    calculateBodyInertia();
     
-    
-	setupSphere();
 	createGrid();
 
-	mTorque = vec3(0.0f, M_2_PI + mMass * 50.0f , 100.0f);
 	mLastTime = getElapsedSeconds();
 }
 
-void BoltPlaygroundApp::setupSphere() {
-	TriMesh::Format fmt = TriMesh::Format().positions().normals().texCoords().tangents();
-	TriMesh mesh( geom::Sphere().subdivisions( 60 ).radius(7.5), fmt );
-    mSphereBatch = gl::Batch::create( mesh, mRedGlsl );
-}
 
 glm::mat3x3    BoltPlaygroundApp::getTriangleInerciaTensor(const Triangle& triangle, const vec3 &centerMass) {
 	using namespace glm;
@@ -205,7 +190,7 @@ void BoltPlaygroundApp::calculateBodyInertia()
 {
     mVolume= 0.0f;
     mCenterMass= vec3(0.0f);
-    glm::mat3x3 inertiaTensor(0.0f);
+    glm::mat<3,3,double> inertiaTensor(0.0f);
     for (const auto &t : mTriangles) {
         auto vol = t.Determinant() /6.0f;
         mVolume += vol;
@@ -214,15 +199,15 @@ void BoltPlaygroundApp::calculateBodyInertia()
     }
 
     mCenterMass /= mVolume > 0 ?  mVolume : 1.0f;
-    mInertiaTensor = glm::mat3x3(0.0f);
+    mInertiaTensor = glm::mat<3,3,double> (0.0f);
     for (const auto &t : mTriangles) {
         auto tensor = getTriangleInerciaTensor(t, mCenterMass);
         mInertiaTensor += tensor;
     }
-    mMass = mVolume * 1000.0f; // density 1000 kg/m^3
-    mBoundingSphere = Sphere::calculateBoundingSphere( mMesh->getPositions<3>(), mMesh->getNumVertices() );
-    mBoundingSphere.setRadius(2 * mBoundingSphere.getRadius());
-    mQuat = quat();
+    mMass = mVolume * 1000; // density 1000 kg/m^3
+   
+    mQuat = glm::qua<double>();
+    mTorque = glm::vec<3, double>(0.0, M_2_PI + mMass * 66000000, 3000000000000 );
 }
 
 void BoltPlaygroundApp::createGrid()
@@ -259,7 +244,7 @@ vector  w  = @w;
 vector4 q  = @orient;
 matrix3 I  = 3@itensor * @mass;
 w = qrotate(qinvert(q), w);
-<vector  kw1  = w;
+vector  kw1  = w;
 vector4 kq1  = q;
 vector  kdw1 = dw(qrotate(qinvert(kq1), t), kw1, I);>
 
@@ -280,74 +265,67 @@ vector kw  = (kw1  + kw2  * 2 + kw3  * 2 + kw4)  * @TimeInc / 6;
 v@torque = set(0, 0, 0);
 @orient  = qmultiply(q, quaternion(kw));
 @w       = qrotate(@orient, w + kdw);
+ 
+ 
+ Runge Kutta 4th order
+ dy/dt = f(t, y), y(t_0) = y_0
+ 
+ y_n+1 = y_n + h/6(k1 + k2 + k3 + k4)
+ t_n+1 = t_n + delta
+ 
+ k1 = f(t_n, y_n)
+ k2 = f(t_n + delta / 2, y_n + delta * k1 / 2)
+ k3 = f(t_n + delta / 2, y_n + delta * k2 / 2)
+ k4 = f(t_n + delta, y_n + delta * k3 )
+
+ ---------------------------
+ Looking to solve
+ 
+ dw/dt = f(t, w) = I^-1 * (N - w x I*w )
+ w = dq/dt
+ q = q_0 + delta * w
 
  */
 void BoltPlaygroundApp::update()
 {
 	double elapsed = getElapsedSeconds() - mLastTime;
 	mLastTime = getElapsedSeconds();
-
-	quat incQuat = angleAxis( 0.05f, vec3(0.0f, 1.0f, 0.0f) );
-	mQuat = incQuat * mQuat;
-    
-	mW = eulerAngles(mQuat);
-	vec3 t = mTorque;;
-	vec3 w = mW;
+	auto t = mTorque;;
+	auto w = mW;
 	auto q = mQuat;
-	glm::mat3x3 I = mInertiaTensor * mMass;
+	auto I = mInertiaTensor * mMass;
 
-	//w = qrotate(qinvert(q), w);
-	auto qi = glm::inverse(q);
-	auto dw = [](const vec3& t, const vec3& w, const glm::mat3x3& I) {
-		// Euler's equations
-		//  N = (dL/dt)space = (dL/dt)body + cross(w, L)
+	auto qi = inverse(q);
+    auto dw = [](const glm::vec<3,double>& t, const glm::vec<3,double>& w, const glm::mat<3,3,double>& I) {
 		return glm::inverse(I) * (t - glm::cross(w, I * w));
 	};
-
-	// vector  kw1  = w;
-	// vector4 kq1  = q;
-	// vector  kdw1 = dw(qrotate(qinvert(kq1), t), kw1, I);
-
+    
+    w = qi * mW;
 	auto kw1 = w;
-	auto kdw1 = dw(rotate(inverse(q), t),w,I);
+    auto kq1 = q;
+	auto kdw1 = dw(inverse(kq1) * t,w,I);
 
-	// vector  kw2  = w + kdw1 * @TimeInc * 0.5;
-	// vector4 kq2  = qmultiply(q, quaternion(kw1 * @TimeInc * 0.5));
-	// vector  kdw2 = dw(qrotate(qinvert(kq2), t), kw2, I);
-	auto kw2  = w + kdw1 * static_cast<float>(elapsed) * 0.5f;
-	auto kq2  = q * quat(0.0f, kw1 * static_cast<float>(elapsed) * 0.5f);
-	auto kdw2 = dw(rotate(inverse(kq2), t), kw2, I);
+	auto kw2  = w + kdw1 * elapsed * 0.5;
+	auto kq2  = q * glm::qua<double>(kw1 * elapsed * 0.5);
+	auto kdw2 = dw(inverse(kq2) * t, kw2, I);
 
-	// vector  kw3  = w + kdw2 * @TimeInc * 0.5;
-	// vector4 kq3  = qmultiply(q, quaternion(kw2 * @TimeInc * 0.5));
-	// vector  kdw3 = dw(qrotate(qinvert(kq3), t), kw3, I);
-	auto kw3  = w + kdw2 * static_cast<float>(elapsed) * 0.5f;
-	auto kq3  = q * quat(0.0f, kw2 * static_cast<float>(elapsed) * 0.5f);
-	auto kdw3 = dw(rotate(inverse(kq3), t), kw3, I);
+	auto kw3  = w + kdw2 * elapsed * 0.5;
+	auto kq3  = q * glm::qua<double>(kw2 * elapsed * 0.5);
+	auto kdw3 = dw(inverse(kq3) * t, kw3, I);
 
-	// vector  kw4  = w + kdw3 * @TimeInc;
-	// vector4 kq4  = qmultiply(q, quaternion(kw3 * @TimeInc));
-	// vector  kdw4 = dw(qrotate(qinvert(kq4), t), kw4, I);
-	auto kw4  = w + kdw3 * static_cast<float>(elapsed);
-	auto kq4  = q * quat(0.0f, kw3 * static_cast<float>(elapsed));
-	auto kdw4 = dw(rotate(inverse(kq4), t), kw4, I);
+	auto kw4  = w + kdw3 * elapsed;
+	auto kq4  = q * glm::qua<double>(kw3 * elapsed);
+	auto kdw4 = dw(inverse(kq4) * t, kw4, I);
 
-	// vector kdw = (kdw1 + kdw2 * 2 + kdw3 * 2 + kdw4) * @TimeInc / 6;
-	// vector kw = (kw1 + kw2 * 2 + kw3 * 2 + kw4) * @ TimeInc / 6;
-	auto kdw = (kdw1 + kdw2 * 2.0f + kdw3 * 2.0f + kdw4) * static_cast<float>(elapsed) / 6.0f;
-	auto kw  = (kw1  + kw2  * 2.0f + kw3  * 2.0f + kw4)  * static_cast<float>(elapsed) / 6.0f;
+	auto kdw = (kdw1 + kdw2 * 2.0 + kdw3 * 2.0 + kdw4) * elapsed / 6.0;
+	auto kw  = (kw1  + kw2  * 2.0 + kw3  * 2.0 + kw4)  * elapsed / 6.0;
 
-	// v@torque = set(0, 0, 0);
-	// @orient  = qmultiply(q, quaternion(kw));
-	// @w       = qrotate(@orient, w + kdw);
-
-	// dw / dt = inv(I) * ( torque - cross( w, I * w ) )
-
-	mTorque = vec3(0.0f, 0.0f, 0.0f);
-	//mQuat = mQuat *  kw;
-	//mW    = rotate(mQuat, w + kdw);
-
+	mTorque = glm::vec<3, double>(0.0);
+	mQuat   = glm::qua<double>(kw) * q;
+	mW      = mQuat * (w + kdw);
 }
+
+
 
 void BoltPlaygroundApp::draw() {
 	gl::enableDepthWrite();
@@ -357,8 +335,6 @@ void BoltPlaygroundApp::draw() {
 	gl::pushMatrices();
 		gl::rotate( mQuat );
         mBatch->draw();
-        gl::translate( mCenterMass);
-        mSphereBatch->draw();
     gl::popMatrices();
     gl::disableDepthWrite();
     if( mGrid ) {
@@ -370,6 +346,4 @@ void BoltPlaygroundApp::draw() {
 }
 
 
-CINDER_APP( BoltPlaygroundApp, RendererGl, [] ( App::Settings *settings ) {
-	settings->setMultiTouchEnabled( false );
-} )
+CINDER_APP( BoltPlaygroundApp, RendererGl, [] ( App::Settings *settings ) {} )
