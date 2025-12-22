@@ -1,0 +1,3 @@
+[submodule "videocam-selection/dependencies/PS3EYEDriver"]
+	path = videocam-selection/dependencies/PS3EYEDriver
+	url = https://github.com/inspirit/PS3EYEDriver.git
