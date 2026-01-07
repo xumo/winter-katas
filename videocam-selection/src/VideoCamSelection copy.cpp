@@ -1,4 +1,4 @@
-#include "cinder/app/App.h"
+/*#include "cinder/app/App.h"
 #include "cinder/app/RendererGl.h"
 #include "cinder/gl/gl.h"
 #include "cinder/Capture.h"
@@ -29,15 +29,15 @@ class VideoCamSelectionApp : public App {
     bool setupCaptureWithMode( Capture::DeviceRef device, const Capture::Mode& mode );
     void updateModes();
 
-    CaptureRef                        mCapture;
-    gl::TextureRef                    mTexture;
-    std::vector<Capture::DeviceRef>  mDevices;
-    int                                mSelectedDeviceIndex;
-    bool                            mShowUI;
+    CaptureRef                          mCapture;
+    gl::TextureRef                      mTexture;
+    std::vector<Capture::DeviceRef>     mDevices;
+    int                                 mSelectedDeviceIndex;
+    bool                                mShowUI;
 
     // Mode selection
-    std::vector<Capture::Mode> mCurrentModes;
-    int                           mSelectedModeIndex;
+    std::vector<Capture::Mode>          mCurrentModes;
+    int                                 mSelectedModeIndex;
 };
 
 void VideoCamSelectionApp::setup()
@@ -314,9 +314,9 @@ void VideoCamSelectionApp::setupCapture( Capture::DeviceRef device )
 
 void VideoCamSelectionApp::printDevices()
 {
-    /*for( const auto& device : Capture::getDevices() ) {
+    for( const auto& device : Capture::getDevices() ) {
         CI_LOG_I( "Device: " << device->getName() );
-    }*/
+    }
     std::vector<ps3eye::PS3EYECam::PS3EYERef> devices( ps3eye::PS3EYECam::getDevices() );
         console() << "PS3Eye found: " << devices.size() << " cameras" << std::endl;
 }
@@ -394,3 +394,4 @@ void prepareSettings( VideoCamSelectionApp::Settings* settings )
 }
 
 CINDER_APP( VideoCamSelectionApp, RendererGl, prepareSettings )
+*/
