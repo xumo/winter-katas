@@ -7,8 +7,10 @@
 #include "cinder/Utilities.h"
 
 #include "ps3eye.h"
+#include "VideoInput.hpp"
 
 #include "Ps3EyeVideoInput.hpp"
+#include "CiVideoInput.hpp"
 
 using namespace ci;
 using namespace ci::app;
@@ -24,7 +26,7 @@ class VideoCamSelectionApp : public App {
     void keyDown( KeyEvent event ) override;
 
   private:
-    std::vector<Ps3EyeVideoInputRef> mPs3s;
+    std::vector<VideoInputRef> mVideoInputs;
 };
 
 void VideoCamSelectionApp::setup()
@@ -37,22 +39,31 @@ void VideoCamSelectionApp::setup()
     
     for(auto device :  PS3EYECam::getDevices())
     {
-        cout << " device " << device << "\n";
-        mPs3s.push_back(Ps3EyeVideoInput::Create(device));
+        cout << " ps3 device " << device << "\n";
+        mVideoInputs.push_back(Ps3EyeVideoInput::Create(device));
+    }
+    
+    auto ciDevices =  Capture::getDevices();
+    for (auto device : ciDevices) {
+        cout << " cinder cwebcam device " << device << "\n";
+        mVideoInputs.push_back(CiVideoInput::Create(device));
     }
     
     
 }
 
 void VideoCamSelectionApp::cleanup() {
- 
+    for(const auto& videoInput :  mVideoInputs)
+    {
+        videoInput->Destroy();
+    }
 }
 
 void VideoCamSelectionApp::update()
 {
-    for(const auto& ps3 :  mPs3s)
+    for(const auto& videoInput :  mVideoInputs)
     {
-        ps3->Update();
+        videoInput->Update();
     }
 
 }
@@ -64,29 +75,29 @@ void VideoCamSelectionApp::draw()
     
     
     gl::setMatricesWindow( getWindowWidth(), getWindowHeight() );
-    int cols = mPs3s.size() > 1 ? 2 : 1;
-    int rows = static_cast<int>(mPs3s.size()) / 2;
+    int cols = mVideoInputs.size() > 1 ? 2 : 1;
+    int rows = mVideoInputs.size() > 1 ? static_cast<int>(mVideoInputs.size()) / 2 : 1;
     int width = getWindowWidth() / cols;
     int height = getWindowHeight() / rows;
-    int i = 0;
-    for(const auto& ps3 :  mPs3s)
+    int i = 0, j = 0;
+    for(const auto& videoInput :  mVideoInputs)
     {
+        j = std::ceil(i / rows);
         glPushMatrix();
-        gl::draw( ps3->GetTexture(), Rectf(width * i, 0,width * (i + 1), height ) );
+        gl::draw(
+                 videoInput->GetTexture(),
+                 Rectf(width * (i % 2), height * j, width * ( (i % 2) + 1), height * (j + 1))
+                 );
         glPopMatrix();
         i++;
     }
-    
-
     //ImGui::End();
-    
 }
 
 void VideoCamSelectionApp::keyDown( KeyEvent event )
 {
     
 }
-
 
 
 void prepareSettings( VideoCamSelectionApp::Settings* settings )

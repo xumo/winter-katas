@@ -25,6 +25,16 @@ Ps3EyeVideoInput::~Ps3EyeVideoInput()
     std::cout << "~Ps3EyeVideoInput\n";
 }
 
+void Ps3EyeVideoInput::Destroy()
+{
+    if (mEye)
+        mEye->stop();
+    //
+    delete[] frame_bgr;
+    std::cout << "~Ps3EyeVideoInput\n";
+}
+
+
 void Ps3EyeVideoInput::Update()
 {
     if(mEye)

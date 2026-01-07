@@ -1,3 +1,4 @@
+#pragma once
 //
 //  VideoCamDevice.hpp
 //  cinder-sandbox
@@ -15,9 +16,15 @@ enum CamType
     KINECT2
 };
 
+class VideoInput;
+
+typedef std::unique_ptr<VideoInput> VideoInputRef;
+
 class VideoInput {
 public:
-    virtual void            Update() = 0;
-    virtual std::string     GetName() = 0;
-    virtual ci::gl::TextureRef  GetTexture() = 0;
+    virtual void                Update()        = 0;
+    virtual void                Destroy()       = 0;
+    virtual std::string         GetName()       = 0;
+    virtual ci::gl::TextureRef  GetTexture()    = 0;
+    virtual CamType             GetType()       = 0;
 };
